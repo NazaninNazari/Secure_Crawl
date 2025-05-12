@@ -1,6 +1,7 @@
 # N0aziXss Secure Crawl 🍓
 
-Advanced Web Security Scanner and Crawler.
+## 🌟 Introduction
+**N0aziXss Secure Crawl** Advanced Web Security Scanner and Crawler.
 
 ## Key Features ✨
 - Automated website crawling
