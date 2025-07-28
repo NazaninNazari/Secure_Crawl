@@ -1,14 +1,14 @@
-# N0aziXss Secure Crawl 🍓
+# N0aziXss Secure Crawl v3.1 🍓
 
 ## 🌟 Introduction
 **N0aziXss Secure Crawl** Advanced Web Security Scanner and Crawler.
 
 ## Key Features ✨
-- Automated website crawling
-- Parameterized URL detection
-- Security token and cookie collection
-- HTTP header extraction
-- Professional JSON reporting
+- Intelligent website crawling with adjustable depth
+- Automatic URL parameter detection
+- Cookie, token, and security header extraction
+- Professional JSON reporting with colorful terminal output
+- Security header analysis (CSP, HSTS, X-Frame-Options)
 
 ## Requirements ⚙️
 - Python 3.8+
@@ -24,6 +24,23 @@ pip install -r requirements.txt
 
 #Usage
 python secure_crawl.py
+
+#JSON Report Structure:
+{
+  "scan_info": {
+    "target": "https://example.com",
+    "total_urls": 42,
+    "security_headers": {
+      "CSP": "🟢",
+      "HSTS": "🔴"
+    }
+  },
+  "details": {
+    "tokens": {
+      "api_key=ABC123": "https://example.com/login"
+    }
+  }
+}
 
 # Sample Output
 Enter target URL: example.com

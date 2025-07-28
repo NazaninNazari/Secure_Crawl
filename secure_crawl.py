@@ -18,7 +18,7 @@ console = Console()
 BANNER = Figlet(font='slant').renderText('Secure Crawl')
 console.print(Fore.CYAN + BANNER)
 print(Fore.YELLOW + "♦*"*15)
-print(Fore.CYAN + "🍓N0aziXss Secure Crawl v3.0🍓")
+print(Fore.CYAN + "🍓N0aziXss Secure Crawl v3.1🍓")  # Version updated
 print(Fore.YELLOW + "♦*"*15 + "\n")
 
 class URLScanner:
@@ -30,12 +30,13 @@ class URLScanner:
         self.cookies = {}
         self.tokens = {}
         self.headers_data = {}
+        self.security_headers = {}  # New: Security headers analysis
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
         })
-        self.timeout = 10
+        self.timeout = (5, 15)  # New: Separate connect/read timeouts
         self.error_count = 0
         
         self.token_patterns = [
@@ -50,16 +51,20 @@ class URLScanner:
             r'(?i)(db|database)[_\-]?(user|name|pass|host|port)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]+)[\'"]?',
             r'(?i)(encryption|decryption|secret)_key\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]{16,})[\'"]?',
             r'(?i)(salt|iv|nonce)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]{8,})[\'"]?',
-            r'(?i)(admin|root|superuser)[_\-]?(user|pass|credential)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]+)[\'"]?'
+            r'(?i)(admin|root|superuser)[_\-]?(user|pass|credential)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]+)[\'"]?',
+            r'(?i)bearer\s+([a-zA-Z0-9_\-\.]{20,})',  # New: Bearer tokens
+            r'(?i)ssh-rsa\s+([a-zA-Z0-9_\-\.+=/]{20,})'  # New: SSH keys
         ]
 
     def has_parameters(self, url):
+        """Check if URL has query parameters."""
         try:
             return bool(parse_qs(urlparse(str(url)).query))
         except:
             return False
 
     def is_valid_url(self, url):
+        """Validate URL format and domain."""
         try:
             parsed = urlparse(str(url))
             base_parsed = urlparse(self.base_url)
@@ -68,7 +73,17 @@ class URLScanner:
         except:
             return False
 
+    def check_security_headers(self, headers):
+        """Analyze security headers (NEW FEATURE)."""
+        return {
+            'Content-Security-Policy': '🟢' if 'Content-Security-Policy' in headers else '🔴',
+            'Strict-Transport-Security': '🟢' if 'Strict-Transport-Security' in headers else '🔴',
+            'X-Frame-Options': '🟢' if 'X-Frame-Options' in headers else '🔴',
+            'X-XSS-Protection': '🟢' if 'X-XSS-Protection' in headers else '🔴'
+        }
+
     def extract_security_items(self, url, response):
+        """Extract cookies, tokens, and headers from response."""
         for cookie in response.cookies:
             cookie_str = f"{cookie.name}={cookie.value}"
             if cookie_str not in self.cookies:
@@ -82,8 +97,10 @@ class URLScanner:
                     self.tokens[token] = url
 
         self.headers_data[url] = dict(response.headers)
+        self.security_headers[url] = self.check_security_headers(response.headers)  # New
 
     def extract_links(self, url):
+        """Extract all links from a given URL."""
         try:
             url = str(url)
             if not url.startswith(('http://', 'https://')):
@@ -126,13 +143,13 @@ class URLScanner:
             console.print(f" [✗] [red]Error processing {url}: {type(e).__name__}[/red]")
 
     def crawl(self, max_pages=50):
-        queue = [self.base_url]
+        """Crawl the website up to max_pages."""
+        queue = list(set([self.base_url]))  # New: Remove duplicates
         
         while queue and len(self.visited_urls) < max_pages:
             current_url = queue.pop(0)
             
             if current_url not in self.visited_urls:
-                # console.print(f" [»] Crawling: {textwrap.shorten(current_url, width=70, placeholder='...')}")
                 console.print(f" [»] Crawling: {current_url}")
                 self.visited_urls.add(str(current_url))
                 self.extract_links(current_url)
@@ -141,6 +158,7 @@ class URLScanner:
                 queue.extend(new_urls)
 
     def get_results(self):
+        """Compile all results."""
         return {
             'all': sorted([str(url) for url in self.all_urls if url is not None], 
                          key=lambda x: urlparse(x).path),
@@ -149,10 +167,12 @@ class URLScanner:
             'cookies': self.cookies,
             'tokens': self.tokens,
             'headers': self.headers_data,
+            'security_headers': self.security_headers,  # New
             'error_count': self.error_count
         }
 
     def save_to_json(self, results):
+        """Save results to JSON file."""
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         domain = urlparse(self.base_url).netloc.replace('.', '_')
         filename = f"scan_results_{domain}_{timestamp}.json"
@@ -166,6 +186,7 @@ class URLScanner:
                 "cookies_found": len(results['cookies']),
                 "tokens_found": len(results['tokens']),
                 "headers_found": len(results['headers']),
+                "security_headers_analysis": len(results['security_headers']),  # New
                 "errors_encountered": results['error_count'],
                 "status": "completed"
             },
@@ -181,6 +202,7 @@ class URLScanner:
         ))
 
     def display_headers(self):
+        """Display HTTP headers."""
         if not self.headers_data:
             console.print(Panel.fit("[yellow]No headers found[/yellow]",
                                   border_style="yellow"))
@@ -199,13 +221,38 @@ class URLScanner:
             
             console.print(header_table)
 
+    def display_security_headers(self):
+        """Display security headers analysis (NEW FEATURE)."""
+        if not self.security_headers:
+            console.print(Panel.fit("[yellow]No security headers found[/yellow]",
+                                  border_style="yellow"))
+            return
+        
+        table = Table(title="[bold]Security Headers Analysis[/bold]")
+        table.add_column("URL", style="cyan")
+        table.add_column("CSP", style="green")
+        table.add_column("HSTS", style="green")
+        table.add_column("X-Frame-Options", style="green")
+        
+        for url, headers in self.security_headers.items():
+            table.add_row(
+                url,
+                headers['Content-Security-Policy'],
+                headers['Strict-Transport-Security'],
+                headers['X-Frame-Options']
+            )
+        
+        console.print(table)
+
 def display_section(title, color="blue"):
+    """Display a titled section."""
     console.print(Panel.fit(
         f"[bold {color}]{title}[/bold {color}]",
         border_style=color
     ))
 
 def display_urls(title, items):
+    """Display URLs in a table."""
     if not items:
         console.print(f"[yellow]No {title.lower()} found[/yellow]")
         return
@@ -225,6 +272,7 @@ def display_urls(title, items):
     console.print(table)
 
 def display_findings(title, items):
+    """Display security findings."""
     if not items:
         console.print(f"[yellow]No {title.lower()} found[/yellow]")
         return
@@ -235,6 +283,7 @@ def display_findings(title, items):
 
 if __name__ == "__main__":
     try:
+        start_time = datetime.now()  # New: Track scan duration
         target = console.input("\n[cyan]»[/cyan] Enter target URL: ").strip()
         if not target.startswith(('http://', 'https://')):
             target = f"https://{target}"
@@ -260,6 +309,7 @@ if __name__ == "__main__":
             ("Cookies Found", len(results['cookies'])),
             ("Tokens Found", len(results['tokens'])),
             ("Headers Collected", len(results['headers'])),
+            ("Security Headers Analyzed", len(results['security_headers'])),  # New
             ("Errors Encountered", results['error_count'])
         ]
         
@@ -283,12 +333,14 @@ if __name__ == "__main__":
                 display_section("Potential Tokens", "yellow")
                 display_findings("Tokens", results['tokens'])
             
-            # Display headers
+            # Display headers and security analysis
             scanner.display_headers()
+            scanner.display_security_headers()  # New
             
             scanner.save_to_json(results)
             
             display_section("Scan Completed Successfully", "green")
+            console.print(f"\n[green]Scan duration: {datetime.now() - start_time}[/green]")  # New
         else:
             display_section("No URLs Found", "red")
 
